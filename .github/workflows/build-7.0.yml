@@ -1,0 +1,107 @@
+name: SYNC2_USB_WIFI 7.0 LAB
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'versions/7.0/python/**'
+      - 'versions/7.0/firmware/**'
+      - 'versions/7.0/android/**'
+      - '.github/workflows/build-7.0.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install matplotlib pyserial
+      - name: Compile and verify Python LAB
+        env:
+          MPLBACKEND: Agg
+        working-directory: versions/7.0/python
+        run: |
+          python -m py_compile *.py
+          python AIRCAT500_OfflineAudit_v5.py --self-test
+          python test_full_lab.py
+          python test_lab_replay.py
+          python test_shared_lab.py
+  firmware:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: arduino/setup-arduino-cli@v2
+      - run: |
+          arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core install esp32:esp32@3.0.7 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli compile --fqbn esp32:esp32:esp32s3 versions/7.0/firmware/SYNC2USB_WIFI_v7_0
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+      - run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Android tests and debug build
+        working-directory: versions/7.0/android
+        run: gradle :app:testDebugUnitTest :app:assembleDebug --no-daemon
+      - name: Verify version and package
+        shell: bash
+        run: |
+          mkdir -p /tmp/sync6-apk
+          cp versions/7.0/android/app/build/outputs/apk/debug/app-debug.apk /tmp/sync6-apk/AIRCAT500_v7.0_LAB.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging /tmp/sync6-apk/AIRCAT500_v7.0_LAB.apk > /tmp/badging
+          grep -q "versionName='7.0'" /tmp/badging
+          grep -q "versionCode='17'" /tmp/badging
+          grep -q "name='gr.aircat.androidradaranalyzer.tcplab'" /tmp/badging
+          cd /tmp/sync6-apk
+          sha256sum AIRCAT500_v7.0_LAB.apk > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SYNC2_USB_WIFI_7.0_LAB_LAB_VALIDATION_APK
+          path: /tmp/sync6-apk/
+  package:
+    needs: [python, firmware, android]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: SYNC2_USB_WIFI_7.0_LAB_LAB_VALIDATION_APK
+          path: versions/7.0/apk-validation
+      - name: Assemble verified ZIP
+        run: |
+          (cd versions/7.0/apk-validation && sha256sum -c SHA256SUMS.txt)
+          mkdir -p /tmp/sync6-release
+          (cd versions/7.0 && zip -qr /tmp/sync6-release/SYNC2_USB_WIFI_7.0_LAB_LAB_VALIDATION.zip python firmware android apk-validation CHANGELOG.md VERSION)
+          (cd /tmp/sync6-release && sha256sum SYNC2_USB_WIFI_7.0_LAB_LAB_VALIDATION.zip > SHA256SUMS.txt)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SYNC2_USB_WIFI_7.0_LAB_LAB_VALIDATION_ALL
+          path: /tmp/sync6-release/
+      - name: Archive verified APK and combined ZIP
+        if: github.ref == 'refs/heads/main'
+        run: |
+          mkdir -p versions/7.0/download/validation
+          if [ -e versions/7.0/download/validation/SYNC2_USB_WIFI_7.0_LAB_LAB_VALIDATION.zip ]; then echo "Archive exists; not overwriting"; exit 0; fi
+          cp /tmp/sync6-release/* versions/7.0/download/validation/
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f versions/7.0/apk-validation versions/7.0/download/validation
+          git commit -m "Archive verified 7.0 LAB validation APK and unified ZIP"
+          git push origin HEAD:main

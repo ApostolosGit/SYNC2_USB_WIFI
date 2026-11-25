@@ -26,20 +26,20 @@ class Timeline:
 class ReplayAudit(Audit):
     def __init__(self):
         super().__init__()
-        self.events=[]
-        self.reason=''
+        self._events=[]
+        self._reason=''
     def emit(self, kind, sector=None, rotation_miss=None, period_us=None):
-        if len(self.events)>=250000:
+        if len(self._events)>=250000:
             raise ValueError('LAB replay limit: 250,000 events; no partial report produced.')
-        self.events.append(Event(kind,self._tick,self._segment,sector,
+        self._events.append(Event(kind,self._tick,self._segment,sector,
             sum(1<<n for n in self._seen) if self._active else 0,
             self.evaluated_rotations,self.observed_missing_sectors,self.gaps,
-            self.ambiguous_rotations,self.reason,rotation_miss,period_us))
+            self.ambiguous_rotations,self._reason,rotation_miss,period_us))
     def gap(self, invalid=False):
         super().gap(invalid)
         self.emit('INVALID' if invalid else 'GAP')
     def accept(self,row):
-        self.reason=(row.get('reason') or '')[:300]
+        self._reason=(row.get('reason') or '')[:300]
         try:
             if row.get('capture_event')=='GAP':
                 super().accept(row)
@@ -48,24 +48,24 @@ class ReplayAudit(Audit):
             try: p=bytes.fromhex(row.get('udp_payload_hex',''))
             except (TypeError,ValueError):p=b''
             if not (p==NORTH or (len(p)==4 and p[:3]==b'\x0c\x40\xfd' and p[3]<32)):
-                self.reason='Unsupported or malformed synthetic fixture'
+                self._reason='Unsupported or malformed synthetic fixture'
                 self.gap(True);return
             before=(self.frames,self.evaluated_rotations,self.observed_missing_sectors,
                     self.ambiguous_rotations,len(self.source_intervals_us))
             super().accept(row)
             if self.frames==before[0]:return
             if self.ambiguous_rotations!=before[3]:
-                self.reason='Duplicate/reversed sector; rotation excluded'
+                self._reason='Duplicate/reversed sector; rotation excluded'
                 self.emit('AMBIGUOUS');return
             rotation_miss=self.observed_missing_sectors-before[2] if self.evaluated_rotations>before[1] else None
             period=self.source_intervals_us[-1] if len(self.source_intervals_us)>before[4] else None
             self.emit('NORTH' if p==NORTH else 'SECTOR',None if p==NORTH else p[3],rotation_miss,period)
-        finally:self.reason=''
+        finally:self._reason=''
 
 def read_timeline(stream):
     a=ReplayAudit()
     summary=analyze_stream(stream,a)
-    return Timeline(tuple(a.events),summary)
+    return Timeline(tuple(a._events),summary)
 
 def load_timeline(path):
     with open(path,encoding='utf-8-sig',newline='') as f:return read_timeline(f)

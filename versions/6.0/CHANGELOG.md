@@ -19,3 +19,6 @@ Requested: complete compilation/tests and add Replay/Charts for the new TCP CSV.
 - Both: chart missing IDs by sector, missing IDs per evaluated interval, source NORTH interval scatter, separate continuity counts. Only exact synthetic NORTH/sector fixtures are accepted. Old CSV without capture_index retains an explicit uncertainty warning; no claim of physical source failure. Maximum 250,000 replay events; no silent truncation.
 - New automated regression tests cover clean interval, missing ID, gap, deleted indexed row, ambiguous ordering, partial interval, and legacy index warning (Python). Hardware and GUI interaction have not been physically tested. This is not the full legacy target/track replay for TCP real-radar streams.
 - App release number stays 6.0; Android internal versionCode becomes 16. Separate replay-r1 archive protects the first build. AC5T wire/schema marker unchanged.
+
+### Replay R1 review
+Fixed JSON report serialization by keeping timeline events out of the summary object. Added a regression test for JSON round-trip. The final archive is named Replay R1 FINAL to distinguish it from the first CI attempt; versionName remains 6.0.

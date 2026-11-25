@@ -68,7 +68,7 @@ jobs:
           sha256sum AIRCAT500_v6.0_LAB.apk > SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: SYNC2_USB_WIFI_6.0_LAB_REPLAY_R1_APK
+          name: SYNC2_USB_WIFI_6.0_LAB_REPLAY_R1_FINAL_APK
           path: /tmp/sync6-apk/
   package:
     needs: [python, firmware, android]
@@ -81,26 +81,26 @@ jobs:
           fetch-depth: 0
       - uses: actions/download-artifact@v4
         with:
-          name: SYNC2_USB_WIFI_6.0_LAB_REPLAY_R1_APK
-          path: versions/6.0/apk-replay-r1
+          name: SYNC2_USB_WIFI_6.0_LAB_REPLAY_R1_FINAL_APK
+          path: versions/6.0/apk-replay-r1-final
       - name: Assemble verified ZIP
         run: |
-          (cd versions/6.0/apk-replay-r1 && sha256sum -c SHA256SUMS.txt)
+          (cd versions/6.0/apk-replay-r1-final && sha256sum -c SHA256SUMS.txt)
           mkdir -p /tmp/sync6-release
-          (cd versions/6.0 && zip -qr /tmp/sync6-release/SYNC2_USB_WIFI_6.0_LAB_REPLAY_R1.zip python firmware android apk-replay-r1 CHANGELOG.md VERSION)
-          (cd /tmp/sync6-release && sha256sum SYNC2_USB_WIFI_6.0_LAB_REPLAY_R1.zip > SHA256SUMS.txt)
+          (cd versions/6.0 && zip -qr /tmp/sync6-release/SYNC2_USB_WIFI_6.0_LAB_REPLAY_R1_FINAL.zip python firmware android apk-replay-r1-final CHANGELOG.md VERSION)
+          (cd /tmp/sync6-release && sha256sum SYNC2_USB_WIFI_6.0_LAB_REPLAY_R1_FINAL.zip > SHA256SUMS.txt)
       - uses: actions/upload-artifact@v4
         with:
-          name: SYNC2_USB_WIFI_6.0_LAB_REPLAY_R1_ALL
+          name: SYNC2_USB_WIFI_6.0_LAB_REPLAY_R1_FINAL_ALL
           path: /tmp/sync6-release/
       - name: Archive verified APK and combined ZIP
         if: github.ref == 'refs/heads/main'
         run: |
-          mkdir -p versions/6.0/download/replay-r1
-          if [ -e versions/6.0/download/replay-r1/SYNC2_USB_WIFI_6.0_LAB_REPLAY_R1.zip ]; then echo "Archive exists; not overwriting"; exit 0; fi
-          cp /tmp/sync6-release/* versions/6.0/download/replay-r1/
+          mkdir -p versions/6.0/download/replay-r1-final
+          if [ -e versions/6.0/download/replay-r1-final/SYNC2_USB_WIFI_6.0_LAB_REPLAY_R1_FINAL.zip ]; then echo "Archive exists; not overwriting"; exit 0; fi
+          cp /tmp/sync6-release/* versions/6.0/download/replay-r1-final/
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -f versions/6.0/apk-replay-r1 versions/6.0/download/replay-r1
-          git commit -m "Archive verified 6.0 LAB Replay R1 APK and unified ZIP"
+          git add -f versions/6.0/apk-replay-r1-final versions/6.0/download/replay-r1-final
+          git commit -m "Archive verified 6.0 LAB Replay R1 final APK and unified ZIP"
           git push origin HEAD:main

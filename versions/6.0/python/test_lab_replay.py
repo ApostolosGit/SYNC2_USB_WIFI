@@ -1,4 +1,4 @@
-import csv, io, unittest
+import csv, io, unittest, json
 from AIRCAT500_OfflineAudit_v5 import REQUIRED
 from aircat_lab_replay import read_timeline
 
@@ -16,6 +16,11 @@ def timeline(sequence,deleted=None,indexed=True):
         w.writerow(row)
     f.seek(0);return read_timeline(f)
 class Tests(unittest.TestCase):
+    def test_report_serializable(self):
+        t=timeline(['N',*range(32),'N'])
+        self.assertNotIn('_events',t.summary)
+        self.assertNotIn('events',t.summary)
+        self.assertEqual(json.loads(json.dumps(t.summary))['evaluated_rotations'],1)
     def test_complete(self):
         t=timeline(['N',*range(32),'N'])
         self.assertEqual(t.events[-1].rotation_miss,0);self.assertEqual(t.events[-1].period_us,4125000)

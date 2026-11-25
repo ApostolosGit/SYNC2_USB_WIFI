@@ -321,7 +321,7 @@ def connect_windows_wifi(ssid, password, reuse_profile=False):
 
 # TCP-only synthetic LAB receiver, isolated from the legacy USB/LAN paths.
 from aircat_tcp_lab import WifiReceiver, CSV_EXTRA
-from AIRCAT500_OfflineAudit_v5 import analyze_file as analyze_lab_file
+from aircat_lab_replay import load_timeline, show_lab_replay, show_lab_charts
 
 
 def create_wifi_source_dialog(parent, on_confirm):
@@ -6678,9 +6678,9 @@ class AircatStatsApp:
                 with open(path,encoding='utf-8-sig',newline='') as f:
                     header=next(csv.reader(f),[])
                 if 'capture_event' in header:
-                    result=analyze_lab_file(path)
-                    report='TCP LAB — Offline continuity audit\n\n'+json.dumps(result,ensure_ascii=False,indent=2)
-                    self.file_analysis_queue.put(("lab_done",path,report))
+                    timeline=load_timeline(path)
+                    report='TCP LAB — Offline continuity audit\n\n'+json.dumps(timeline.summary,ensure_ascii=False,indent=2)
+                    self.file_analysis_queue.put(("lab_done",path,report,timeline))
                     return
                 records = load_from_csv(path, self._queue_file_analysis_progress)
             else:
@@ -6737,7 +6737,8 @@ class AircatStatsApp:
                     self.set_progress(percent, message)
 
                 elif kind == "lab_done":
-                    _, path, report = item
+                    _, path, report, timeline = item
+                    self._lab_timeline=timeline
                     browser=getattr(self,'_raw_bin_browser',None)
                     if browser is not None:
                         try:browser.close()
@@ -6749,11 +6750,12 @@ class AircatStatsApp:
                     self.report_text=report
                     self.text.delete("1.0","end")
                     self.text.insert("end",report)
-                    self.set_progress(100.0,"LAB audit complete; legacy replay/charts unavailable for this format.")
+                    self.set_progress(100.0,"LAB audit complete. Replay and Charts available for the synthetic timeline.")
                     self.file_analysis_running=False
 
                 elif kind == "done":
                     _, path, records, stats, report = item
+                    self._lab_timeline=None
                     self.last_stats = stats
                     self.report_text = report
                     self.current_file = path
@@ -10952,6 +10954,9 @@ class AircatStatsApp:
 
 
     def show_bar_chart(self):
+        if getattr(self,'_lab_timeline',None) is not None:
+            show_lab_charts(self.root,self._lab_timeline)
+            return
         if not self.current_records:
             messagebox.showinfo("Ραβδοδιάγραμμα", "Δεν υπάρχει φορτωμένο αρχείο για δημιουργία ραβδοδιαγράμματος.")
             return
@@ -11388,6 +11393,9 @@ class AircatStatsApp:
 
 
     def show_replay(self):
+        if getattr(self,'_lab_timeline',None) is not None:
+            show_lab_replay(self.root,self._lab_timeline)
+            return
         if not self.current_records:
             browser = getattr(self, '_raw_bin_browser', None)
             if browser is not None and browser.ready and browser.winfo_exists():
@@ -13439,6 +13447,7 @@ class AircatStatsApp:
         messagebox.showinfo("About", about_text)
 
     def clear_text(self):
+        self._lab_timeline=None
         self.stop_live_capture()
         self.text.delete("1.0", "end")
         self.report_text = ""
@@ -13459,6 +13468,7 @@ class AircatStatsApp:
                 old.close()
             except Exception:
                 pass
+        self._lab_timeline=None
         self.current_records = None  # Never replay stale CSV/PCAP records.
         self.current_file = str(path)
         self.last_stats = None

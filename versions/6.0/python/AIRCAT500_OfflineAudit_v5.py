@@ -1,4 +1,4 @@
-"""AIRCAT500 v5 offline audit for synthetic LAB TCP CSV files only.
+"""AIRCAT500 v6.0 offline audit for synthetic LAB TCP CSV files only.
 No live I/O, no device control, no network connections.
 """
 import argparse
@@ -97,11 +97,11 @@ class Audit:
         d['interpretation']='Observed missing IDs in recorded LAB intervals without detected gaps; not proof of physical radar failure. CSV omits heartbeat records, so an unmarked deletion is not always detectable. No arrival-time inference.'
         return d
 
-def analyze_stream(stream):
+def analyze_stream(stream, audit=None):
     reader=csv.DictReader(stream)
     if not REQUIRED.issubset(reader.fieldnames or []):
         raise ValueError('Not a continuity-aware v5 LAB CSV. Legacy files cannot establish continuity.')
-    a=Audit()
+    a=Audit() if audit is None else audit
     indexed='capture_index' in (reader.fieldnames or [])
     expected=1
     for row in reader:
@@ -128,7 +128,7 @@ def gui():
     import tkinter as tk
     from tkinter import filedialog, messagebox
     from tkinter.scrolledtext import ScrolledText
-    root=tk.Tk();root.title('AIRCAT500 v5 — Offline LAB Audit');root.geometry('800x600')
+    root=tk.Tk();root.title('AIRCAT500 v6.0 — Offline LAB Audit');root.geometry('800x600')
     out=ScrolledText(root,wrap='word');out.pack(fill='both',expand=True,padx=12,pady=12)
     def choose():
         path=filedialog.askopenfilename(filetypes=[('CSV','*.csv'),('All files','*.*')])

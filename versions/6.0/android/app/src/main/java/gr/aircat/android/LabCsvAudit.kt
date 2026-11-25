@@ -4,7 +4,21 @@ import java.io.BufferedReader
 import java.io.Reader
 
 /** Offline-only LAB audit. No connection, device operations or legacy radar inference. */
-internal class LabCsvAudit {
+internal data class LabReplayEvent(val kind:String,val sourceUs:Long?,val segment:Long?,val sector:Int?,
+    val mask:Long,val evaluated:Long,val missing:Long,val gaps:Long,val ambiguous:Long,
+    val rotationMiss:Long?=null,val periodUs:Long?=null)
+
+internal class LabCsvAudit(private val retainTimeline:Boolean=false) {
+    private val timeline=ArrayList<LabReplayEvent>()
+    fun events():List<LabReplayEvent> = timeline.toList()
+    fun missingCounts():LongArray=missBySector.copyOf()
+    fun hasIndex()=indexed
+    private fun emit(kind:String,id:Int?=null,miss:Long?=null,period:Long?=null){
+        if(!retainTimeline)return
+        require(timeline.size<250000){"LAB replay limit: 250,000 events; no partial report"}
+        val mask=if(active)seen.fold(0L){value,i->value or (1L shl i)}else 0L
+        timeline.add(LabReplayEvent(kind,tick,segment,id,mask,rotations,observedMiss,gaps,ambiguous,miss,period))
+    }
     var frames=0L;private set
     var gaps=0L;private set
     var invalidRows=0L;private set
@@ -31,6 +45,7 @@ internal class LabCsvAudit {
         if(invalid)invalidRows++
         if(active)interrupted++
         resetRotation();segment=null;tick=null;seq=null
+        emit(if(invalid)"INVALID" else "GAP")
     }
     fun accept(event:String,segmentValue:String,tickValue:String,seqValue:String,hex:String,source:String){
         if(event=="GAP"){gap();return}
@@ -45,26 +60,31 @@ internal class LabCsvAudit {
         val kind=raw[0].toInt() and 255
         val isNorth=raw.contentEquals(byteArrayOf(0x19,0x40,0xfd.toByte(),0,0,0))
         val id=if(kind==0x0c&&raw.size>=4&&raw[2]==0xfd.toByte())raw[3].toInt() and 255 else null
-        if((kind==0x19&&!isNorth)||(kind==0x0c&&(id==null||id>31))){gap(true);return}
+        if((kind==0x19&&!isNorth)||(kind==0x0c&&(id==null||id>31)) ||
+            (retainTimeline && !isNorth && !(kind==0x0c && raw.size==4 && id!=null))){gap(true);return}
         if(segment!=null&&(segment!=s||t<tick!!||((q-seq!!) and 0xffffffffL) !in 1L..0x7fffffffL))gap()
         segment=s;tick=t;seq=q;frames++
+        var rotationMiss:Long?=null
+        var period:Long?=null
         if(isNorth){
             if(active){
                 rotations++
                 val missing=32-seen.size
                 if(missing==0)perfect++
                 observedMiss+=missing.toLong()
+                rotationMiss=missing.toLong()
                 for(i in 0..31)if(i !in seen)missBySector[i]++
-                north?.let{if(t>it)intervals.add(t-it)}
+                north?.let{if(t>it){intervals.add(t-it);period=t-it}}
             }
             active=true;seen.clear();sector=null;north=t
         }else if(id!=null&&active){
             if(id in seen||sector?.let{id<=it}==true){
                 if(id in seen)duplicates++
-                ambiguous++;resetRotation();return
+                ambiguous++;resetRotation();emit("AMBIGUOUS");return
             }
             seen.add(id);sector=id
         }
+        emit(if(isNorth)"NORTH" else "SECTOR",id,rotationMiss,period)
     }
     fun report():String=buildString{
         appendLine("TCP LAB — Offline continuity audit")
@@ -95,12 +115,12 @@ internal class LabCsvAudit {
     companion object{
         private val required=listOf("capture_event","capture_segment","source_us","frame_no","udp_payload_hex","capture_connection","reason")
         fun isLabHeader(line:String)=AircatCsv.columns(line.removePrefix("\uFEFF")).contains("capture_event")
-        fun read(reader:Reader):LabCsvAudit{
+        fun read(reader:Reader, retainTimeline:Boolean=false):LabCsvAudit{
             val r=reader.buffered()
             val keys=AircatCsv.columns(r.readLine()?.removePrefix("\uFEFF")?:error("Empty CSV"))
             require(required.all{it in keys}){"Not a continuity-aware LAB CSV"}
             val indexes=required.map{keys.indexOf(it)}
-            val result=LabCsvAudit()
+            val result=LabCsvAudit(retainTimeline)
             val index=keys.indexOf("capture_index")
             result.indexed=index>=0
             var expected=1L

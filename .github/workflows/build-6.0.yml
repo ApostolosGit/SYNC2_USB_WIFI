@@ -27,6 +27,7 @@ jobs:
           python -m py_compile *.py
           python AIRCAT500_OfflineAudit_v5.py --self-test
           python test_full_lab.py
+          python test_lab_replay.py
   firmware:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -61,12 +62,13 @@ jobs:
           cp versions/6.0/android/app/build/outputs/apk/debug/app-debug.apk /tmp/sync6-apk/AIRCAT500_v6.0_LAB.apk
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging /tmp/sync6-apk/AIRCAT500_v6.0_LAB.apk > /tmp/badging
           grep -q "versionName='6.0'" /tmp/badging
+          grep -q "versionCode='16'" /tmp/badging
           grep -q "name='gr.aircat.androidradaranalyzer.tcplab'" /tmp/badging
           cd /tmp/sync6-apk
           sha256sum AIRCAT500_v6.0_LAB.apk > SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: SYNC2_USB_WIFI_6.0_LAB_APK
+          name: SYNC2_USB_WIFI_6.0_LAB_REPLAY_R1_APK
           path: /tmp/sync6-apk/
   package:
     needs: [python, firmware, android]
@@ -79,26 +81,26 @@ jobs:
           fetch-depth: 0
       - uses: actions/download-artifact@v4
         with:
-          name: SYNC2_USB_WIFI_6.0_LAB_APK
-          path: versions/6.0/apk
+          name: SYNC2_USB_WIFI_6.0_LAB_REPLAY_R1_APK
+          path: versions/6.0/apk-replay-r1
       - name: Assemble verified ZIP
         run: |
-          (cd versions/6.0/apk && sha256sum -c SHA256SUMS.txt)
+          (cd versions/6.0/apk-replay-r1 && sha256sum -c SHA256SUMS.txt)
           mkdir -p /tmp/sync6-release
-          (cd versions/6.0 && zip -qr /tmp/sync6-release/SYNC2_USB_WIFI_6.0_LAB.zip python firmware android apk CHANGELOG.md VERSION)
-          (cd /tmp/sync6-release && sha256sum SYNC2_USB_WIFI_6.0_LAB.zip > SHA256SUMS.txt)
+          (cd versions/6.0 && zip -qr /tmp/sync6-release/SYNC2_USB_WIFI_6.0_LAB_REPLAY_R1.zip python firmware android apk-replay-r1 CHANGELOG.md VERSION)
+          (cd /tmp/sync6-release && sha256sum SYNC2_USB_WIFI_6.0_LAB_REPLAY_R1.zip > SHA256SUMS.txt)
       - uses: actions/upload-artifact@v4
         with:
-          name: SYNC2_USB_WIFI_6.0_LAB_ALL
+          name: SYNC2_USB_WIFI_6.0_LAB_REPLAY_R1_ALL
           path: /tmp/sync6-release/
       - name: Archive verified APK and combined ZIP
         if: github.ref == 'refs/heads/main'
         run: |
-          mkdir -p versions/6.0/download
-          if [ -e versions/6.0/download/SYNC2_USB_WIFI_6.0_LAB.zip ]; then echo "Archive exists; not overwriting"; exit 0; fi
-          cp /tmp/sync6-release/* versions/6.0/download/
+          mkdir -p versions/6.0/download/replay-r1
+          if [ -e versions/6.0/download/replay-r1/SYNC2_USB_WIFI_6.0_LAB_REPLAY_R1.zip ]; then echo "Archive exists; not overwriting"; exit 0; fi
+          cp /tmp/sync6-release/* versions/6.0/download/replay-r1/
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -f versions/6.0/apk versions/6.0/download
-          git commit -m "Archive verified 6.0 LAB APK and unified ZIP"
+          git add -f versions/6.0/apk-replay-r1 versions/6.0/download/replay-r1
+          git commit -m "Archive verified 6.0 LAB Replay R1 APK and unified ZIP"
           git push origin HEAD:main

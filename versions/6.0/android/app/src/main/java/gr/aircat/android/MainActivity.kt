@@ -434,15 +434,14 @@ class MainActivity : Activity() {
                             reader.mark(65536)
                             val header = reader.readLine()
                             reader.reset()
-                            if (header != null && LabCsvAudit.isLabHeader(header)) LabCsvAudit.read(reader) else null
+                            if (header != null && LabCsvAudit.isLabHeader(header)) LabCsvAudit.read(reader, retainTimeline=true) else null
                         }
                         if (lab != null) {
                             val report = lab.report()
                             runOnUiThread {
                                 hideLoadProgress()
-                                info.text = "TCP LAB CSV — offline audit (previous replay unchanged)"
-                                AlertDialog.Builder(this).setTitle("AIRCAT500 — LAB CSV Audit")
-                                    .setMessage(report).setPositiveButton("OK", null).show()
+                                info.text = "TCP LAB CSV — synthetic offline replay (previous legacy capture unchanged)"
+                                LabReplayDialog(this, lab, report).show()
                             }
                             return@execute
                         }
